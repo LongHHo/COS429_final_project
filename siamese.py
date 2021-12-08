@@ -1,4 +1,3 @@
-from imutils import build_montages
 import numpy as np
 import cv2
 
@@ -8,13 +7,17 @@ import os
 import random
 import tensorflow as tf
 from pathlib import Path
-from tensorflow.keras import applications
-from tensorflow.keras import layers
-from tensorflow.keras import losses
-from tensorflow.keras import optimizers
-from tensorflow.keras import metrics
-from tensorflow.keras import Model
-from tensorflow.keras.applications import resnet
+# from tensorflow.keras import applications
+# from tensorflow.keras import layers
+# from tensorflow.keras import losses
+# from tensorflow.keras import optimizers
+# from tensorflow.keras import metrics
+# from tensorflow.keras import Model
+# from tensorflow.keras.applications import resnet
+
+
+from sklearn.utils import shuffle
+
 
 def get_pairwise_batch(batch_size, train_data):
     """
@@ -91,88 +94,46 @@ def get_triple_batch(batch_size, train_data):
 
     return anchor, positive, negative
 
-
-class DistanceLayer(layers.Layer):
-    """
-    This layer is responsible for computing the distance between the anchor
-    embedding and the positive embedding, and the anchor embedding and the
-    negative embedding.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def call(self, anchor, positive, negative):
-        ap_distance = tf.reduce_sum(tf.square(anchor - positive), -1)
-        an_distance = tf.reduce_sum(tf.square(anchor - negative), -1)
-        return (ap_distance, an_distance)
     
 
 
 
+def make_oneshot_task(N, test_data):
+    """Create pairs of test image, support set for testing N way one-shot learning. """
+    """ N must be less than the number of classes in the test dataset: 20 """
+    n_classes, n_examples, w, h, d = test_data.shape
+    
+    rng = np.random.default_rng()
+
+    indices = rng.randint(0, n_examples,size=(N,))
 
 
-class SiameseModel(Model):
-    """The Siamese Network model with a custom training and testing loops.
+    categories = rng.choice(n_classes,size=(N,),replace=False)            
+    
+    true_category = categories[0]
+    ex1, ex2 = rng.choice(n_examples,replace=False,size=(2,))
+    test_image = np.asarray([test_data[true_category,ex1,:,:]]*N).reshape(N, w, h,1)
+    support_set = test_data[categories,indices,:,:]
+    support_set[0,:,:] = test_data[true_category,ex2]
+    support_set = support_set.reshape(N, w, h,1)
+    targets = np.zeros((N,))
+    targets[0] = 1
+    targets, test_image, support_set = shuffle(targets, test_image, support_set)
+    pairs = [test_image,support_set]
+    return pairs, targets
 
-    Computes the triplet loss using the three embeddings produced by the
-    Siamese Network.
-
-    The triplet loss is defined as:
-       L(A, P, N) = max(‖f(A) - f(P)‖² - ‖f(A) - f(N)‖² + margin, 0)
-    """
-
-    def __init__(self, siamese_network, margin=0.5):
-        super(SiameseModel, self).__init__()
-        self.siamese_network = siamese_network
-        self.margin = margin
-        self.loss_tracker = metrics.Mean(name="loss")
-
-    def call(self, inputs):
-        return self.siamese_network(inputs)
-
-    def train_step(self, data):
-        # GradientTape is a context manager that records every operation that
-        # you do inside. We are using it here to compute the loss so we can get
-        # the gradients and apply them using the optimizer specified in
-        # `compile()`.
-        with tf.GradientTape() as tape:
-            loss = self._compute_loss(data)
-
-        # Storing the gradients of the loss function with respect to the
-        # weights/parameters.
-        gradients = tape.gradient(loss, self.siamese_network.trainable_weights)
-
-        # Applying the gradients on the model using the specified optimizer
-        self.optimizer.apply_gradients(
-            zip(gradients, self.siamese_network.trainable_weights)
-        )
-
-        # Let's update and return the training loss metric.
-        self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
-
-    def test_step(self, data):
-        loss = self._compute_loss(data)
-
-        # Let's update and return the loss metric.
-        self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
-
-    def _compute_loss(self, data):
-        # The output of the network is a tuple containing the distances
-        # between the anchor and the positive example, and the anchor and
-        # the negative example.
-        ap_distance, an_distance = self.siamese_network(data)
-
-        # Computing the Triplet Loss by subtracting both distances and
-        # making sure we don't get a negative value.
-        loss = ap_distance - an_distance
-        loss = tf.maximum(loss + self.margin, 0.0)
-        return loss
-
-    @property
-    def metrics(self):
-        # We need to list our metrics here so the `reset_states()` can be
-        # called automatically.
-        return [self.loss_tracker]
+  
+def test_oneshot(model, N, k, verbose = 0, test_data=None):
+    """Test average N way oneshot learning accuracy of a siamese neural net over k one-shot tasks"""
+    n_correct = 0
+    if verbose:
+        print("Evaluating model on {} random {} way one-shot learning tasks ... \n".format(k,N))
+    for i in range(k):
+        inputs, targets = make_oneshot_task(N,test_data)
+        probs = model.predict(inputs)
+        if np.argmax(probs) == np.argmax(targets):
+            n_correct+=1
+    percent_correct = (100.0 * n_correct / k)
+    if verbose:
+        print("Got an average of {}% {} way one-shot learning accuracy \n".format(percent_correct,N))
+    return percent_correct
