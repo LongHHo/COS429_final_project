@@ -41,16 +41,16 @@ def get_pairwise_batch(batch_size, train_data):
     targets[batch_size//2:] = 1
     for i in range(batch_size):
         category = categories[i]
-        idx_1 = rng.randint(0, n_examples)
+        idx_1 = np.random.randint(0, n_examples)
         pairs[0][i,:,:,:] = train_data[category, idx_1].reshape(w, h, d)
-        idx_2 = rng.randint(0, n_examples)
+        idx_2 = np.random.randint(0, n_examples)
         
         # pick images of same class for 1st half, different for 2nd
         if i >= batch_size // 2:
             category_2 = category  
         else: 
             # add a random number to the category modulo n classes to ensure 2nd image has a different category
-            category_2 = (category + rng.randint(1,n_classes)) % n_classes
+            category_2 = (category + np.random.randint(1,n_classes)) % n_classes
         
         pairs[1][i,:,:,:] = train_data[category_2,idx_2].reshape(w, h, d)
     
@@ -80,16 +80,16 @@ def get_triple_batch(batch_size, train_data):
     
     for i in range(batch_size):
         category = categories[i]
-        idx_1 = rng.randint(0, n_examples)
+        idx_1 = np.random.randint(0, n_examples)
         anchor[i,:,:,:] = train_data[category, idx_1].reshape(w, h, d)
 
         
-        idx_pos = rng.randint(0, n_examples)
+        idx_pos = np.random.randint(0, n_examples)
         cat_pos = category
         positive[i,:,:,:] = train_data[cat_pos,idx_pos].reshape(w, h, d)
 
-        idx_neg = rng.randint(0, n_examples)
-        cat_neg = (category + rng.randint(1,n_classes)) % n_classes
+        idx_neg = np.random.randint(0, n_examples)
+        cat_neg = (category + np.random.randint(1,n_classes)) % n_classes
         negative[i,:,:,:] = train_data[cat_neg,idx_neg].reshape(w, h, d)
 
     return anchor, positive, negative
@@ -105,17 +105,17 @@ def make_oneshot_task(N, test_data):
     
     rng = np.random.default_rng()
 
-    indices = rng.randint(0, n_examples,size=(N,))
+    indices = np.random.randint(0, n_examples,size=(N,))
 
 
     categories = rng.choice(n_classes,size=(N,),replace=False)            
     
     true_category = categories[0]
     ex1, ex2 = rng.choice(n_examples,replace=False,size=(2,))
-    test_image = np.asarray([test_data[true_category,ex1,:,:]]*N).reshape(N, w, h,1)
+    test_image = np.asarray([test_data[true_category,ex1,:,:]]*N).reshape(N, w, h, d)
     support_set = test_data[categories,indices,:,:]
     support_set[0,:,:] = test_data[true_category,ex2]
-    support_set = support_set.reshape(N, w, h,1)
+    support_set = support_set.reshape(N, w, h,d)
     targets = np.zeros((N,))
     targets[0] = 1
     targets, test_image, support_set = shuffle(targets, test_image, support_set)
