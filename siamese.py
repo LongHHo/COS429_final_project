@@ -29,10 +29,10 @@ def get_pairwise_batch(batch_size, train_data):
     rng = np.random.default_rng()
 
     # randomly sample several classes to use in the batch
-    categories = rng.choice(n_classes,size=(batch_size,),replace=False)
+    categories = rng.choice(n_classes,size=(batch_size,))
     
     # initialize 2 empty arrays for the input image batch
-    pairs=[np.zeros((batch_size, h, w, d)) for i in range(2)]
+    pairs=[np.zeros((batch_size, w, h, d)) for i in range(2)]
     
     # initialize vector for the targets
     targets=np.zeros((batch_size,))
@@ -53,6 +53,48 @@ def get_pairwise_batch(batch_size, train_data):
             category_2 = (category + np.random.randint(1,n_classes)) % n_classes
         
         pairs[1][i,:,:,:] = train_data[category_2,idx_2].reshape(w, h, d)
+    
+    return pairs, targets
+
+
+def get_pairwise_data(train_data):
+    """
+    Create batch of n pairs, half same class, half different class
+    """
+    n_classes, n_examples, w, h, d = train_data.shape
+    
+    total_examples = n_classes*n_examples
+
+    # initialize 2 empty arrays for the input image batch
+    pairs=[np.zeros((2*total_examples, h, w, d)) for i in range(2)]
+    
+    # initialize vector for the targets
+    targets=np.zeros((2*total_examples,))
+    
+    # make one half of it '1's, so 2nd half of batch has same class
+    targets[0:total_examples//2] = 1
+
+    halfway = total_examples // 2
+
+    for i in range(total_examples):
+
+        curr_category = i // n_examples
+
+        curr_example = i % n_examples
+
+        pairs[0][i,:,:,:] = train_data[curr_category, curr_example].reshape(w, h, d)
+        pairs[0][halfway + i,:,:,:] = train_data[curr_category, curr_example].reshape(w, h, d)
+
+        # generate in category 
+        idx_1 = np.random.randint(0, n_examples)
+        same_class_im = train_data[curr_category, idx_1].reshape(w, h, d)
+        pairs[1][i,:,:,:] = same_class_im
+
+        # different category
+        diff_category = (curr_category + np.random.randint(1,n_classes)) % n_classes
+        idx_2 = np.random.randint(0, n_examples)
+        diff_class_im = train_data[diff_category, idx_2].reshape(w, h, d)
+        pairs[1][halfway + i,:,:,:] = diff_class_im
     
     return pairs, targets
 
